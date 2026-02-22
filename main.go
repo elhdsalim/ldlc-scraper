@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/playwright-community/playwright-go"
@@ -12,6 +11,7 @@ func main() {
 	if err != nil {
 		log.Panicf("could not start playwright: %v", err)
 	}
+	defer pw.Stop()
 
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
 		Headless: playwright.Bool(false),
@@ -19,11 +19,13 @@ func main() {
 	if err != nil {
 		log.Panicf("could not launch browser: %v", err)
 	}
+	defer browser.Close()
 
 	page, err := browser.NewPage()
 	if err != nil {
 		log.Panicf("could not create page: %v", err)
 	}
+	defer page.Close()
 
 	if _, err = page.Goto(LDLC_URL + LAPTOPS); err != nil {
 		log.Fatalf("could not goto: %v", err)
@@ -45,5 +47,16 @@ func main() {
 		hrefs = append(hrefs, href)
 	}
 
-	fmt.Println(hrefs)
+	done := make(chan bool, len(hrefs))
+
+	for _, href := range hrefs {
+		go func() {
+			ScrapeCategory(href, browser)
+			done <- true
+		}()
+	}
+
+	for range hrefs {
+		<-done
+	}
 }
