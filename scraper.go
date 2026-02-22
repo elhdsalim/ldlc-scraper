@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -25,7 +26,40 @@ func handleNoPagination(page playwright.Page) {
 			log.Panicf("could not get title")
 		}
 
-		fmt.Println(title, price)
+		link, err := product.Locator("h3.title-3 > a").GetAttribute("href")
+		if err != nil {
+			log.Panicf("could not get link")
+		}
+
+		pic, err := product.Locator("div.pic > a > img").GetAttribute("src")
+		if err != nil {
+			log.Panicf("could not get pic")
+		}
+
+		desc, err := product.Locator("p.desc").InnerText()
+		if err != nil {
+			log.Panicf("could not get desc")
+		}
+
+		stock, err := product.Locator("div[data-stock-web]").GetAttribute("data-stock-web")
+		if err != nil {
+			log.Printf("could not get stock: %v", err)
+		}
+
+		p := Product{
+			Title: title,
+			Price: price,
+			Link:  link,
+			Pic:   pic,
+			Desc:  desc,
+			Stock: stock,
+		}
+
+		data, err := json.Marshal(p)
+		if err != nil {
+			log.Panicf("could not json marshal the product %s", title)
+		}
+		fmt.Println(string(data))
 
 	}
 
