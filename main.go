@@ -3,6 +3,9 @@ package main
 import (
 	"log"
 
+	"ldlcscraper.com/config"
+	"ldlcscraper.com/scraper"
+
 	"github.com/playwright-community/playwright-go"
 )
 
@@ -27,7 +30,7 @@ func main() {
 	}
 	defer page.Close()
 
-	if _, err = page.Goto(LDLC_URL + LAPTOPS); err != nil {
+	if _, err = page.Goto(config.LDLC_URL + config.LAPTOPS); err != nil {
 		log.Fatalf("could not goto: %v", err)
 	}
 	ulist := page.Locator("body > div.main > div.sbloc.cat-bloc > ul")
@@ -51,7 +54,7 @@ func main() {
 
 	for _, href := range hrefs {
 		go func() {
-			ScrapeCategory(href, browser)
+			scraper.ScrapeCategory(href, browser)
 			done <- true
 		}()
 	}

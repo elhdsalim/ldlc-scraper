@@ -1,9 +1,12 @@
-package main
+package scraper
 
 import (
 	"encoding/json"
 	"fmt"
 	"log"
+
+	"ldlcscraper.com/config"
+	"ldlcscraper.com/models"
 
 	"github.com/playwright-community/playwright-go"
 )
@@ -46,7 +49,7 @@ func handleNoPagination(page playwright.Page) {
 			log.Printf("could not get stock: %v", err)
 		}
 
-		p := Product{
+		p := models.Product{
 			Title: title,
 			Price: price,
 			Link:  link,
@@ -72,7 +75,7 @@ func ScrapeCategory(url string, browser playwright.Browser) {
 	}
 	defer page.Close()
 
-	page.Goto(LDLC_URL + url)
+	page.Goto(config.LDLC_URL + url)
 	amount := page.Locator("#listing > div.wrap-list > div.head-list.fix-list > div.title-2")
 	err = amount.WaitFor()
 	if err != nil {
