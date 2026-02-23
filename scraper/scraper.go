@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 
 	"ldlcscraper.com/config"
@@ -67,6 +68,12 @@ func handleProductsListing(page playwright.Page, category string, subCategory st
 			log.Panicf("could not json marshal the product %s", title)
 		}
 		fmt.Println(string(data))
+		file, err := os.OpenFile("products.jsonl", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			log.Panicf("could not save in products.jsonl")
+		}
+		defer file.Close()
+		file.Write(append(data, '\n'))
 
 	}
 }
