@@ -1,10 +1,12 @@
 package models
 
 type Product struct {
-	Title string `json:"title"`
-	Price string `json:"price"`
-	Link  string `json:"link"`
-	Pic   string `json:"pic"`
-	Desc  string `json:"desc"`
-	Stock string `json:"stock"`
+	Title    string `json:"title"`
+	Price    string `json:"price"`
+	Link     string `json:"link"`
+	Pic      string `json:"pic"`
+	Desc     string `json:"desc"`
+	Stock    string `json:"stock"`
+	Category    string `json:"category"`
+	SubCategory string `json:"sub_category"`
 }

@@ -2,7 +2,10 @@ module ldlcscraper.com
 
 go 1.25.6
 
-require github.com/playwright-community/playwright-go v0.5200.1
+require (
+	github.com/joho/godotenv v1.5.1
+	github.com/playwright-community/playwright-go v0.5200.1
+)
 
 require (
 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 
 	"ldlcscraper.com/config"
 	"ldlcscraper.com/models"
@@ -11,7 +12,8 @@ import (
 	"github.com/playwright-community/playwright-go"
 )
 
-func handleNoPagination(page playwright.Page) {
+func handleProductsListing(page playwright.Page, category string, subCategory string) {
+	page.Locator(".pdt-item").First().WaitFor()
 	products, err := page.Locator(".pdt-item").All()
 
 	if err != nil {
@@ -50,12 +52,14 @@ func handleNoPagination(page playwright.Page) {
 		}
 
 		p := models.Product{
-			Title: title,
-			Price: price,
-			Link:  link,
-			Pic:   pic,
-			Desc:  desc,
-			Stock: stock,
+			Title:       title,
+			Price:       price,
+			Link:        link,
+			Pic:         pic,
+			Desc:        desc,
+			Stock:       stock,
+			Category:    category,
+			SubCategory: subCategory,
 		}
 
 		data, err := json.Marshal(p)
@@ -65,17 +69,34 @@ func handleNoPagination(page playwright.Page) {
 		fmt.Println(string(data))
 
 	}
+}
+
+func handlePagination(page playwright.Page, category string, subCategory string) {
+	pages, err := page.Locator("ul.pagination > li:not(.next) > a[data-page]").Last().GetAttribute("data-page")
+	if err != nil {
+		log.Panicf("could not get page amount (pagination)")
+	}
+
+	pageAmount, err := strconv.Atoi(pages)
+	if err != nil {
+		log.Panicf("could not convert pageAmount to int %v", err)
+	}
+
+	for i := 2; i <= pageAmount; i++ { // we start at the first page, so we need to continue with 2+
+		page.Goto(config.LDLC_URL + subCategory + "page" + strconv.Itoa(i) + "/")
+		handleProductsListing(page, category, subCategory)
+	}
 
 }
 
-func ScrapeCategory(url string, browser playwright.Browser) {
+func ScrapeCategory(category string, subCategory string, browser playwright.Browser) {
 	page, err := browser.NewPage()
 	if err != nil {
 		log.Panicf("could not create page: %v", err)
 	}
 	defer page.Close()
 
-	page.Goto(config.LDLC_URL + url)
+	page.Goto(config.LDLC_URL + subCategory)
 	amount := page.Locator("#listing > div.wrap-list > div.head-list.fix-list > div.title-2")
 	err = amount.WaitFor()
 	if err != nil {
@@ -88,14 +109,9 @@ func ScrapeCategory(url string, browser playwright.Browser) {
 	})
 
 	if err != nil {
-		fmt.Printf("1 %s\n", url)
-		handleNoPagination(page)
+		handleProductsListing(page, category, subCategory)
 		return
 	}
 
-	text, err := pagination.Locator("li").Last().InnerText()
-	if err != nil {
-		log.Panicf("could not get pagination text : %v", err)
-	}
-	fmt.Printf("%s %s\n", text, url)
+	handlePagination(page, category, subCategory)
 }
