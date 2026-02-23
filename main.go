@@ -24,7 +24,7 @@ func main() {
 	defer pw.Stop()
 
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false),
+		Headless: playwright.Bool(true),
 		Proxy: &playwright.Proxy{
 			Server:   os.Getenv("PROXY_SERVER"),
 			Username: playwright.String(os.Getenv("PROXY_USERNAME")),
@@ -66,14 +66,14 @@ func main() {
 
 	done := make(chan bool, len(hrefs))
 
-	for _, href := range hrefs {
+	for _, href := range hrefs[:4] {
 		go func() {
 			scraper.ScrapeCategory(config.LAPTOPS, href, browser)
 			done <- true
 		}()
 	}
 
-	for range hrefs {
+	for range hrefs[:4] {
 		<-done
 	}
 }

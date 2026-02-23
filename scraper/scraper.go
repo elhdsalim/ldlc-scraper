@@ -71,7 +71,7 @@ func handleProductsListing(page playwright.Page, category string, subCategory st
 	}
 }
 
-func handlePagination(page playwright.Page, category string, subCategory string) {
+func handlePagination(page playwright.Page, category string, subCategory string, browser playwright.Browser) {
 	pages, err := page.Locator("ul.pagination > li:not(.next) > a[data-page]").Last().GetAttribute("data-page")
 	if err != nil {
 		log.Panicf("could not get page amount (pagination)")
@@ -82,9 +82,23 @@ func handlePagination(page playwright.Page, category string, subCategory string)
 		log.Panicf("could not convert pageAmount to int %v", err)
 	}
 
+	done := make(chan bool, pageAmount-1)
+
 	for i := 2; i <= pageAmount; i++ { // we start at the first page, so we need to continue with 2+
-		page.Goto(config.LDLC_URL + subCategory + "page" + strconv.Itoa(i) + "/")
-		handleProductsListing(page, category, subCategory)
+		go func() {
+			newPage, err := browser.NewPage()
+			if err != nil {
+				log.Panicf("could not create page %v", err)
+			}
+			defer newPage.Close()
+			newPage.Goto(config.LDLC_URL + subCategory + "page" + strconv.Itoa(i) + "/")
+			handleProductsListing(newPage, category, subCategory)
+			done <- true
+		}()
+	}
+
+	for i := 2; i <= pageAmount; i++ {
+		<-done
 	}
 
 }
@@ -113,5 +127,5 @@ func ScrapeCategory(category string, subCategory string, browser playwright.Brow
 		return
 	}
 
-	handlePagination(page, category, subCategory)
+	handlePagination(page, category, subCategory, browser)
 }
