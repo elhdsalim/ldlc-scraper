@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
+	"sync"
 
 	"ldlcscraper.com/config"
 	"ldlcscraper.com/models"
@@ -13,20 +15,15 @@ import (
 	"github.com/playwright-community/playwright-go"
 )
 
-func handleProductsListing(page playwright.Page, category string, subCategory string) {
+var fileMu sync.Mutex
+
+func handleProductsListing(page playwright.Page, category string, subCategory string, file *os.File) {
 	page.Locator(".pdt-item").First().WaitFor()
 	products, err := page.Locator(".pdt-item").All()
 
 	if err != nil {
 		log.Panicf("could not get products items")
 	}
-
-	file, err := os.OpenFile("products.jsonl", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		log.Panicf("could not save in products.jsonl")
-	}
-
-	defer file.Close()
 
 	for _, product := range products {
 		price, err := product.Locator("div.price").Last().InnerText()
@@ -55,9 +52,14 @@ func handleProductsListing(page playwright.Page, category string, subCategory st
 		}
 
 		stock, err := product.Locator("div[data-stock-web]").GetAttribute("data-stock-web")
+
 		if err != nil {
 			log.Printf("could not get stock: %v", err)
 		}
+
+		price = strings.ReplaceAll(price, "€", ".")
+		price = strings.ReplaceAll(price, " ", "")
+		price = strings.ReplaceAll(price, "\u00a0", "")
 
 		p := models.Product{
 			Title:       title,
@@ -75,12 +77,14 @@ func handleProductsListing(page playwright.Page, category string, subCategory st
 			log.Panicf("could not json marshal the product %s", title)
 		}
 		fmt.Println(string(data))
+		fileMu.Lock()
 		file.Write(append(data, '\n'))
+		fileMu.Unlock()
 
 	}
 }
 
-func handlePagination(page playwright.Page, category string, subCategory string, browser playwright.Browser) {
+func handlePagination(page playwright.Page, category string, subCategory string, browser playwright.Browser, file *os.File) {
 	pages, err := page.Locator("ul.pagination > li:not(.next) > a[data-page]").Last().GetAttribute("data-page")
 	if err != nil {
 		log.Panicf("could not get page amount (pagination)")
@@ -101,7 +105,7 @@ func handlePagination(page playwright.Page, category string, subCategory string,
 			}
 			defer newPage.Close()
 			newPage.Goto(config.LDLC_URL + subCategory + "page" + strconv.Itoa(i) + "/")
-			handleProductsListing(newPage, category, subCategory)
+			handleProductsListing(newPage, category, subCategory, file)
 			done <- true
 		}()
 	}
@@ -112,7 +116,7 @@ func handlePagination(page playwright.Page, category string, subCategory string,
 
 }
 
-func ScrapeCategory(category string, subCategory string, browser playwright.Browser) {
+func ScrapeCategory(category string, subCategory string, browser playwright.Browser, file *os.File) {
 	page, err := browser.NewPage()
 	if err != nil {
 		log.Panicf("could not create page: %v", err)
@@ -132,9 +136,9 @@ func ScrapeCategory(category string, subCategory string, browser playwright.Brow
 	})
 
 	if err != nil {
-		handleProductsListing(page, category, subCategory)
+		handleProductsListing(page, category, subCategory, file)
 		return
 	}
 
-	handlePagination(page, category, subCategory, browser)
+	handlePagination(page, category, subCategory, browser, file)
 }

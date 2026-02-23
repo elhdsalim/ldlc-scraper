@@ -64,16 +64,22 @@ func main() {
 		hrefs = append(hrefs, href)
 	}
 
+	file, err := os.OpenFile("products.jsonl", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		log.Fatalf("could not open products.jsonl: %v", err)
+	}
+	defer file.Close()
+
 	done := make(chan bool, len(hrefs))
 
-	for _, href := range hrefs[:4] {
+	for _, href := range hrefs[:2] {
 		go func() {
-			scraper.ScrapeCategory(config.LAPTOPS, href, browser)
+			scraper.ScrapeCategory(config.LAPTOPS, href, browser, file)
 			done <- true
 		}()
 	}
 
-	for range hrefs[:4] {
+	for range hrefs[:2] {
 		<-done
 	}
 }
