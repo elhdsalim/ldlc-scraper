@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"sync"
 
 	"ldlcscraper.com/config"
+	"ldlcscraper.com/database"
 	"ldlcscraper.com/models"
 
 	"github.com/playwright-community/playwright-go"
@@ -17,7 +19,7 @@ import (
 
 var fileMu sync.Mutex
 
-func handleProductsListing(page playwright.Page, category string, subCategory string, file *os.File) {
+func handleProductsListing(page playwright.Page, category string, subCategory string, file *os.File, db *sql.DB) {
 	page.Locator(".pdt-item").First().WaitFor()
 	products, err := page.Locator(".pdt-item").All()
 
@@ -76,6 +78,7 @@ func handleProductsListing(page playwright.Page, category string, subCategory st
 		if err != nil {
 			log.Panicf("could not json marshal the product %s", title)
 		}
+		database.InsertProduct(db, p)
 		fmt.Println(string(data))
 		fileMu.Lock()
 		file.Write(append(data, '\n'))
@@ -84,7 +87,7 @@ func handleProductsListing(page playwright.Page, category string, subCategory st
 	}
 }
 
-func handlePagination(page playwright.Page, category string, subCategory string, browser playwright.Browser, file *os.File) {
+func handlePagination(page playwright.Page, category string, subCategory string, browser playwright.Browser, file *os.File, db *sql.DB) {
 	pages, err := page.Locator("ul.pagination > li:not(.next) > a[data-page]").Last().GetAttribute("data-page")
 	if err != nil {
 		log.Panicf("could not get page amount (pagination)")
@@ -105,7 +108,7 @@ func handlePagination(page playwright.Page, category string, subCategory string,
 			}
 			defer newPage.Close()
 			newPage.Goto(config.LDLC_URL + subCategory + "page" + strconv.Itoa(i) + "/")
-			handleProductsListing(newPage, category, subCategory, file)
+			handleProductsListing(newPage, category, subCategory, file, db)
 			done <- true
 		}()
 	}
@@ -116,7 +119,7 @@ func handlePagination(page playwright.Page, category string, subCategory string,
 
 }
 
-func ScrapeCategory(category string, subCategory string, browser playwright.Browser, file *os.File) {
+func ScrapeCategory(db *sql.DB, category string, subCategory string, browser playwright.Browser, file *os.File) {
 	page, err := browser.NewPage()
 	if err != nil {
 		log.Panicf("could not create page: %v", err)
@@ -136,9 +139,9 @@ func ScrapeCategory(category string, subCategory string, browser playwright.Brow
 	})
 
 	if err != nil {
-		handleProductsListing(page, category, subCategory, file)
+		handleProductsListing(page, category, subCategory, file, db)
 		return
 	}
 
-	handlePagination(page, category, subCategory, browser, file)
+	handlePagination(page, category, subCategory, browser, file, db)
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"ldlcscraper.com/config"
+	"ldlcscraper.com/database"
 	"ldlcscraper.com/scraper"
 
 	"github.com/joho/godotenv"
@@ -17,6 +18,12 @@ func main() {
 		log.Panicf("could not load .env: %v", err)
 	}
 
+	db, err := database.InitDatabase("products.db")
+	if err != nil {
+		log.Fatalf("could not init database %v", err)
+	}
+	defer db.Close()
+
 	pw, err := playwright.Run()
 	if err != nil {
 		log.Panicf("could not start playwright: %v", err)
@@ -24,7 +31,7 @@ func main() {
 	defer pw.Stop()
 
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(true),
+		Headless: playwright.Bool(false),
 		Proxy: &playwright.Proxy{
 			Server:   os.Getenv("PROXY_SERVER"),
 			Username: playwright.String(os.Getenv("PROXY_USERNAME")),
@@ -72,14 +79,14 @@ func main() {
 
 	done := make(chan bool, len(hrefs))
 
-	for _, href := range hrefs[:2] {
+	for _, href := range hrefs {
 		go func() {
-			scraper.ScrapeCategory(config.LAPTOPS, href, browser, file)
+			scraper.ScrapeCategory(db, config.LAPTOPS, href, browser, file)
 			done <- true
 		}()
 	}
 
-	for range hrefs[:2] {
+	for range hrefs {
 		<-done
 	}
 }
