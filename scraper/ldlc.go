@@ -72,6 +72,7 @@ func handleProductsListing(page playwright.Page, category string, subCategory st
 			Stock:       stock,
 			Category:    category,
 			SubCategory: subCategory,
+			Source:      "ldlc",
 		}
 
 		data, err := json.Marshal(p)
