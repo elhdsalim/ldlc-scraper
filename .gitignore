@@ -34,3 +34,4 @@ go.work.sum
 
 proxies.txt
 products.jsonl
+*.db
