@@ -31,7 +31,7 @@ func main() {
 	defer pw.Stop()
 
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false),
+		Headless: playwright.Bool(true),
 		Proxy: &playwright.Proxy{
 			Server:   os.Getenv("PROXY_SERVER"),
 			Username: playwright.String(os.Getenv("PROXY_USERNAME")),
@@ -77,11 +77,14 @@ func main() {
 	}
 	defer file.Close()
 
+	slots := make(chan struct{}, 3)
 	done := make(chan bool, len(hrefs))
 
 	for _, href := range hrefs {
 		go func() {
+			slots <- struct{}{}
 			scraper.ScrapeCategory(db, config.LAPTOPS, href, browser, file)
+			<-slots
 			done <- true
 		}()
 	}

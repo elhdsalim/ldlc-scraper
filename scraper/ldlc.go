@@ -98,10 +98,12 @@ func handlePagination(page playwright.Page, category string, subCategory string,
 		log.Panicf("could not convert pageAmount to int %v", err)
 	}
 
+	slots := make(chan struct{}, 3)
 	done := make(chan bool, pageAmount-1)
 
 	for i := 2; i <= pageAmount; i++ { // we start at the first page, so we need to continue with 2+
 		go func() {
+			slots <- struct{}{}
 			newPage, err := browser.NewPage()
 			if err != nil {
 				log.Panicf("could not create page %v", err)
@@ -109,6 +111,7 @@ func handlePagination(page playwright.Page, category string, subCategory string,
 			defer newPage.Close()
 			newPage.Goto(config.LDLC_URL + subCategory + "page" + strconv.Itoa(i) + "/")
 			handleProductsListing(newPage, category, subCategory, file, db)
+			<-slots
 			done <- true
 		}()
 	}
