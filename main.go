@@ -43,53 +43,78 @@ func main() {
 	}
 	defer browser.Close()
 
-	page, err := browser.NewPage()
-	if err != nil {
-		log.Panicf("could not create page: %v", err)
-	}
-	defer page.Close()
-
-	if _, err = page.Goto(config.LDLC_URL + config.LAPTOPS); err != nil {
-		log.Fatalf("could not goto: %v", err)
-	}
-
-	ulist := page.Locator("body > div.main > div.sbloc.cat-bloc > ul")
-	err = ulist.WaitFor()
-	if err != nil {
-		log.Panicf("could not find the items list: %v", err)
-	}
-
-	list, err := ulist.Locator("a").All()
-	if err != nil {
-		log.Panicf("could not find the hypedlink text")
-	}
-
-	var hrefs []string
-
-	for _, a := range list {
-		href, _ := a.GetAttribute("href")
-		hrefs = append(hrefs, href)
-	}
-
 	file, err := os.OpenFile("products.jsonl", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		log.Fatalf("could not open products.jsonl: %v", err)
 	}
 	defer file.Close()
 
-	slots := make(chan struct{}, 3)
-	done := make(chan bool, len(hrefs))
+	done := make(chan bool, len(config.Categories))
 
-	for _, href := range hrefs {
+	for category, path := range config.Categories {
 		go func() {
-			slots <- struct{}{}
-			scraper.ScrapeCategory(db, config.LAPTOPS, href, browser, file)
-			<-slots
+			log.Printf("scraping category: %s", category)
+
+			page, err := browser.NewPage()
+			if err != nil {
+				log.Printf("could not create page for %s: %v", category, err)
+				done <- true
+				return
+			}
+
+			if _, err = page.Goto(config.LDLC_URL + path); err != nil {
+				log.Printf("could not goto %s: %v", category, err)
+				page.Close()
+				done <- true
+				return
+			}
+
+			ulist := page.Locator("body > div.main > div.sbloc.cat-bloc > ul")
+			err = ulist.WaitFor()
+			if err != nil {
+				log.Printf("could not find subcategories for %s: %v", category, err)
+				page.Close()
+				done <- true
+				return
+			}
+
+			list, err := ulist.Locator("a").All()
+			if err != nil {
+				log.Printf("could not find links for %s: %v", category, err)
+				page.Close()
+				done <- true
+				return
+			}
+
+			var hrefs []string
+			for _, a := range list {
+				href, _ := a.GetAttribute("href")
+				hrefs = append(hrefs, href)
+			}
+			page.Close()
+
+			slots := make(chan struct{}, 3)
+			subDone := make(chan bool, len(hrefs))
+
+			for _, href := range hrefs {
+				go func() {
+					slots <- struct{}{}
+					scraper.ScrapeCategory(db, category, href, browser, file)
+					<-slots
+					subDone <- true
+				}()
+			}
+
+			for range hrefs {
+				<-subDone
+			}
+
+			log.Printf("done scraping %s (%d subcategories)", category, len(hrefs))
 			done <- true
 		}()
 	}
 
-	for range hrefs {
+	for range config.Categories {
 		<-done
 	}
 }

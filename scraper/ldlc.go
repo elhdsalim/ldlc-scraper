@@ -3,7 +3,6 @@ package scraper
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -80,12 +79,13 @@ func handleProductsListing(page playwright.Page, category string, subCategory st
 			log.Panicf("could not json marshal the product %s", title)
 		}
 		database.InsertProduct(db, p)
-		fmt.Println(string(data))
 		fileMu.Lock()
 		file.Write(append(data, '\n'))
 		fileMu.Unlock()
 
 	}
+
+	log.Printf("scraped %d products from %s", len(products), subCategory)
 }
 
 func handlePagination(page playwright.Page, category string, subCategory string, browser playwright.Browser, file *os.File, db *sql.DB) {
@@ -126,26 +126,71 @@ func handlePagination(page playwright.Page, category string, subCategory string,
 func ScrapeCategory(db *sql.DB, category string, subCategory string, browser playwright.Browser, file *os.File) {
 	page, err := browser.NewPage()
 	if err != nil {
-		log.Panicf("could not create page: %v", err)
+		log.Printf("could not create page: %v", err)
+		return
 	}
 	defer page.Close()
 
 	page.Goto(config.LDLC_URL + subCategory)
-	amount := page.Locator("#listing > div.wrap-list > div.head-list.fix-list > div.title-2")
-	err = amount.WaitFor()
-	if err != nil {
-		log.Panicf("could not find the items list: %v", err)
-	}
 
-	pagination := page.Locator("#listing > div.wrap-list > div.listing-product > ul.pagination")
-	err = pagination.WaitFor(playwright.LocatorWaitForOptions{
+	// page has a product listing
+	amount := page.Locator("#listing > div.wrap-list > div.head-list.fix-list > div.title-2")
+	err = amount.WaitFor(playwright.LocatorWaitForOptions{
 		Timeout: playwright.Float(5000),
 	})
+	if err == nil {
+		// products found, scrape them
+		pagination := page.Locator("#listing > div.wrap-list > div.listing-product > ul.pagination")
+		err = pagination.WaitFor(playwright.LocatorWaitForOptions{
+			Timeout: playwright.Float(5000),
+		})
 
-	if err != nil {
-		handleProductsListing(page, category, subCategory, file, db)
+		if err != nil {
+			handleProductsListing(page, category, subCategory, file, db)
+		} else {
+			handlePagination(page, category, subCategory, browser, file, db)
+		}
 		return
 	}
 
-	handlePagination(page, category, subCategory, browser, file, db)
+	// page has sub-subcategories
+	catBloc := page.Locator("div.sbloc.cat-bloc > ul")
+	err = catBloc.WaitFor(playwright.LocatorWaitForOptions{
+		Timeout: playwright.Float(5000),
+	})
+	if err != nil {
+		log.Printf("skipping %s: no products or subcategories found", subCategory)
+		return
+	}
+
+	links, err := catBloc.Locator("a").All()
+	if err != nil {
+		log.Printf("could not get sub-subcategory links for %s: %v", subCategory, err)
+		return
+	}
+
+	var hrefs []string
+	for _, a := range links {
+		href, _ := a.GetAttribute("href")
+		hrefs = append(hrefs, href)
+	}
+	page.Close()
+
+	log.Printf("found %d sub-subcategories in %s, diving deeper", len(hrefs), subCategory)
+
+	slots := make(chan struct{}, 3)
+	done := make(chan bool, len(hrefs))
+
+	for _, href := range hrefs {
+		go func() {
+			slots <- struct{}{}
+			ScrapeCategory(db, category, href, browser, file)
+			<-slots
+			done <- true
+		}()
+	}
+
+	for range hrefs {
+		<-done
+	}
 }
